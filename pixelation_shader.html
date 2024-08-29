@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Three.js Pixelation Shader with GUI</title>
+  <style>
+    body { margin: 0; }
+    canvas { display: block; }
+    #gui-container { position: absolute; top: 10px; left: 10px; }
+  </style>
+</head>
+<body>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.7/dat.gui.min.js"></script>
+  <script>
+    // Initialize scene, camera, and renderer
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(
+      -1, 1, // left and right
+      1, -1, // top and bottom
+      0.1, 1000 // near and far
+    );
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // Load a reliable texture from Three.js examples
+    const textureLoader = new THREE.TextureLoader();
+    const newImageUrl = 'https://threejs.org/examples/textures/brick_diffuse.jpg'; // Image from Three.js
+    const texture = textureLoader.load(newImageUrl, () => {
+      console.log('Texture loaded successfully');
+    }, undefined, (err) => {
+      console.error('Texture loading error:', err);
+    });
+
+    // Shader material setup
+    const shaderMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        screenTexture: { type: 't', value: texture },
+        pixelSize: { type: 'f', value: 10.0 },
+        viewportSize: { type: 'v2', value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = vec4(position.xy, 0.0, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D screenTexture;
+        uniform float pixelSize;
+        uniform vec2 viewportSize;
+
+        void main() {
+          vec2 fragCoord = gl_FragCoord.xy;
+          float x = mod(fragCoord.x, pixelSize);
+          float y = mod(fragCoord.y, pixelSize);
+
+          x = fragCoord.x + floor(pixelSize / 2.0) - x;
+          y = fragCoord.y + floor(pixelSize / 2.0) - y;
+
+          vec2 texCoord = vec2(x, y) / viewportSize;
+          gl_FragColor = texture2D(screenTexture, texCoord);
+        }
+      `,
+      transparent: true
+    });
+
+    // Full-screen quad for shader
+    const quadGeometry = new THREE.PlaneGeometry(2, 2); // Full-screen quad
+    const fullScreenQuad = new THREE.Mesh(quadGeometry, shaderMaterial);
+    scene.add(fullScreenQuad);
+
+    // GUI setup
+    const gui = new dat.GUI();
+    const guiParams = {
+      pixelSize: 10.0,
+      fullscreen: function() {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(console.error);
+        } else {
+          document.exitFullscreen().catch(console.error);
+        }
+      }
+    };
+    gui.add(guiParams, 'pixelSize', 1, 13).onChange(value => {
+      shaderMaterial.uniforms.pixelSize.value = value;
+    });
+    gui.add(guiParams, 'fullscreen').name('Toggle Fullscreen');
+
+    // Animation loop
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Render shader effect to screen
+      renderer.setRenderTarget(null); // Make sure to render to the screen
+      renderer.clear();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // Handle window resizing
+    window.addEventListener('resize', () => {
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      shaderMaterial.uniforms.viewportSize.value.set(window.innerWidth, window.innerHeight);
+      camera.left = -window.innerWidth / window.innerHeight;
+      camera.right = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+    });
+
+    camera.position.z = 1; // Adjust camera position
+
+    // Handle fullscreen changes
+    document.addEventListener('fullscreenchange', () => {
+      if (!document.fullscreenElement) {
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        shaderMaterial.uniforms.viewportSize.value.set(window.innerWidth, window.innerHeight);
+        camera.left = -window.innerWidth / window.innerHeight;
+        camera.right = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+      }
+    });
+  </script>
+  <div id="gui-container"></div>
+</body>
+</html>
